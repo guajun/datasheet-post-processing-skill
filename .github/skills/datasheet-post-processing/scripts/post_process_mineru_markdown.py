@@ -24,6 +24,7 @@ NUMBERED_HEADING_PATTERN = re.compile(
 TOC_LINE_PATTERN = re.compile(r"^\d+\.0\s+.+?(?:\.{1,}|\s)\s*\d+\s*$")
 INVALID_PATH_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 DEFAULT_SOURCE_SEPARATOR = "\n\n<!-- Source split: {name} -->\n\n"
+MAX_SECTION_STEM_LENGTH = 42
 
 
 @dataclass
@@ -198,6 +199,23 @@ def shorten_filename_stem(text: str, limit: int = 72) -> str:
     return shortened or text[:limit]
 
 
+def section_path_stem(section: Section, limit: int = MAX_SECTION_STEM_LENGTH) -> str:
+    number = ".".join(str(part) for part in section.order_key)
+    if len(section.order_key) == 1:
+        number = f"{number}.0"
+    title_tail = section.title.removeprefix(number).strip()
+    safe_tail = sanitize_filename(title_tail)
+    safe_number = sanitize_filename(number)
+    base = safe_number if not safe_tail else f"{safe_number}_{safe_tail}"
+    if len(base) <= limit:
+        return base
+    digest = hashlib.sha1(section.title.encode("utf-8")).hexdigest()[:6]
+    reserved = len(safe_number) + len(digest) + 2
+    tail_limit = max(8, limit - reserved)
+    short_tail = shorten_filename_stem(safe_tail, tail_limit)
+    return f"{safe_number}_{short_tail}_{digest}"
+
+
 def trim_blank_lines(lines: Iterable[str]) -> list[str]:
     values = list(lines)
     while values and not values[0].strip():
@@ -366,7 +384,7 @@ def write_section_tree(sections: list[Section], output_root: Path) -> int:
 
 
 def write_section(section: Section, parent_dir: Path, sibling_index: int) -> int:
-    folder_stem = shorten_filename_stem(sanitize_filename(section.title))
+    folder_stem = section_path_stem(section)
     node_name = f"{sibling_index:02d}_{folder_stem}"
 
     if section.children:

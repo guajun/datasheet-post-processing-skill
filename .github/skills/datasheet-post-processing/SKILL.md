@@ -38,7 +38,8 @@ The goal is reproducible post-processing, not hand-editing generated fragments.
 5. Ignore original TOC lines that look like `12.0 EtherCAT 196` or `5.0 Register Map .... 32`.
 6. Keep unnumbered headings inside their current numbered section unless the manual clearly uses a different scheme.
 7. When a parent section has prose before child sections, write it as `00_<section-title>.md`, not `index.md`.
-8. Prefer generated output over manual edits; tune the parser and regenerate when the tree looks wrong.
+8. Keep generated path components short for Windows/Git compatibility. Use section numbers plus a short title slug and hash; keep the full section title inside the Markdown and README tree.
+9. Prefer generated output over manual edits; tune the parser and regenerate when the tree looks wrong.
 
 ## Workflow
 
@@ -70,6 +71,7 @@ The goal is reproducible post-processing, not hand-editing generated fragments.
    - Each leaf section becomes `<ordinal>_<section-title>.md`.
    - Each parent section becomes `<ordinal>_<section-title>/`.
    - Parent prose before child sections becomes `00_<section-title>.md` inside that folder.
+   - If paths may be committed on Windows, cap each generated section stem to a short length such as 42 characters.
 
 6. Build the output README.
    - Include source files.
@@ -100,6 +102,7 @@ python .github/skills/datasheet-post-processing/scripts/post_process_mineru_mark
 - If `1.1` appears as a top-level section, convert `N.0` to level 1 and `N.M` to level 2.
 - If parent directories contain only child files and no parent overview, that is fine when the parent had no prose before the first child.
 - If a parent overview is named `index.md`, rename the generator output to `00_<section>.md` so users do not mistake it for a table of contents.
+- If `git add` fails with `Filename too long`, shorten generated path components and regenerate; do not rely on every collaborator enabling long-path support.
 - If image names are generic, improve nearby context extraction around figure and table labels.
 - If generated file paths are too long, shorten only the filename stem, not the visible section title inside the Markdown.
 
