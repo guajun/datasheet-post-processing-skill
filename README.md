@@ -1,4 +1,4 @@
-# Datasheet Post Processing
+# Datasheet Post Processing Skill
 
 A small workflow package for turning raw MinerU PDF-to-Markdown output into a local, navigable datasheet tree.
 
