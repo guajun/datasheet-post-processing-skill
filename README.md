@@ -1,12 +1,12 @@
 # Datasheet Post Processing Skill
 
-A small workflow package for turning raw MinerU PDF-to-Markdown output into a local, navigable datasheet tree.
+A skill-first workflow package for turning raw MinerU PDF-to-Markdown output into a local, navigable datasheet tree.
 
-It captures a repeatable pattern learned while post-processing LAN9252 datasheet Markdown:
+MinerU output varies a lot between PDFs, so this repository does not try to provide a universal parser. It captures a repeatable workflow and includes a sample script learned from a few real datasheet cleanups:
 
 - Merge one or more raw Markdown chunks in document order.
 - Detect numbered datasheet headings such as `12.0`, `12.2`, and `12.14.60.1` even when all headings were converted to `#`.
-- Ignore table-of-contents lines and unnumbered OCR headings that should stay inside their parent section.
+- Ignore common table-of-contents lines and unnumbered OCR headings that should stay inside their parent section.
 - Split content into a progressive file tree.
 - Preserve parent-section prose as `00_<section>.md` before child sections.
 - Download remote MinerU images into `assets/images/`.
@@ -23,7 +23,7 @@ README.md
 
 ## Quick Start
 
-Run the example script with one or more raw MinerU Markdown files:
+Run the sample script with one or more raw MinerU Markdown files:
 
 ```powershell
 python .github/skills/datasheet-post-processing/scripts/post_process_mineru_markdown.py `
@@ -64,9 +64,9 @@ output/LAN9252/
    - Numbered datasheets usually use `# 1.0 ...`, `# 1.1 ...`, `# 1.1.1 ...`.
    - Some OCR conversions use `#` for every visual heading, so the script rebuilds depth from the heading number, not the Markdown heading level.
    - Unnumbered headings such as `SPECIAL CSR HANDLING`, `Notes:`, or `8 AND 16-BIT ACCESS` are kept as normal content unless explicitly numbered with a dotted section number.
-4. Run the post-processing script.
+4. Run the sample post-processing script, or adapt it for the document's actual patterns.
 5. Review the generated `README.md` tree and a few deep sections.
-6. If the tree has false positives, tune the heading parser before editing generated files by hand.
+6. If the tree has false positives or missing sections, tune the sample script for that document before editing generated files by hand.
 7. Commit the raw sources, script, generated tree, or whichever artifacts your project wants to keep.
 
 ## Output Semantics
@@ -91,8 +91,8 @@ This avoids using `index.md` for content that is not actually a directory index.
 
 ## Skill
 
-The Copilot skill at `.github/skills/datasheet-post-processing/SKILL.md` describes the full agent workflow: how to inspect raw MinerU Markdown, choose heading rules, localize images, split the tree, validate results, and avoid common mistakes.
+The Copilot skill at `.github/skills/datasheet-post-processing/SKILL.md` is the main artifact. It describes the full agent workflow: how to inspect raw MinerU Markdown, choose heading rules, adapt the sample script, localize images, split the tree, validate results, and avoid common mistakes.
 
 ## Notes
 
-The example script uses only the Python standard library. It is intended as a practical starting point, not a complete parser for every possible datasheet style. Treat the generated file tree as reproducible output and improve the parser when the structure looks wrong.
+The sample script uses only the Python standard library. It is intended as a practical starting point, not a complete parser for every possible datasheet style. Prefer conservative defaults that keep real content over aggressive heuristics that might delete sections. Treat the generated file tree as reproducible output and improve or replace the sample parser when the structure looks wrong.

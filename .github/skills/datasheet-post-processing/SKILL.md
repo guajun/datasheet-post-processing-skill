@@ -1,6 +1,6 @@
 ---
 name: datasheet-post-processing
-description: 'Post-process raw MinerU PDF-to-Markdown datasheet output. Use when: splitting large converted datasheets, building a numbered section file tree, localizing MinerU CDN images, cleaning table-of-contents noise, preserving parent-section prose, validating generated manuals.'
+description: 'Skill-first workflow for post-processing raw MinerU PDF-to-Markdown datasheet output. Use when: inspecting converted datasheets, adapting a sample splitter script, building a numbered section file tree, localizing MinerU images, cleaning table-of-contents noise, preserving parent-section prose, validating generated manuals.'
 argument-hint: 'raw markdown files and output directory'
 ---
 
@@ -8,7 +8,7 @@ argument-hint: 'raw markdown files and output directory'
 
 Use this skill when a user has one or more raw MinerU PDF-to-Markdown files and wants a clean, local, navigable manual tree.
 
-The goal is reproducible post-processing, not hand-editing generated fragments.
+The goal is reproducible post-processing guided by inspection, not a universal parser and not hand-editing generated fragments. The included Python script is a sample starting point; adapt it to the current document's actual heading, TOC, and image patterns.
 
 ## Expected Inputs
 
@@ -35,11 +35,11 @@ The goal is reproducible post-processing, not hand-editing generated fragments.
 4. Do not treat bare numeric text as structural headings:
    - `8 AND 16-BIT ACCESS` is content, not section `8.0`.
    - `1.8V to 3.3V variable voltage I/O` is content, not section `1.8`.
-5. Ignore original TOC lines that look like `12.0 EtherCAT 196` or `5.0 Register Map .... 32`.
+5. Ignore clear original TOC lines, especially dotted-leader or visibly separated page-number rows such as `5.0 Register Map .... 32`. Be conservative with ambiguous single-space lines such as `12.0 EtherCAT 196`; prefer keeping possible real section headings and flagging TOC noise during validation over deleting real content.
 6. Keep unnumbered headings inside their current numbered section unless the manual clearly uses a different scheme.
 7. When a parent section has prose before child sections, write it as `00_<section-title>.md`, not `index.md`.
 8. Keep generated path components short for Windows/Git compatibility. Use section numbers plus a short title slug and hash; keep the full section title inside the Markdown and README tree.
-9. Prefer generated output over manual edits; tune the parser and regenerate when the tree looks wrong.
+9. Prefer generated output over manual edits; tune or replace the sample parser and regenerate when the tree looks wrong.
 
 ## Workflow
 
@@ -53,6 +53,7 @@ The goal is reproducible post-processing, not hand-editing generated fragments.
    - For datasheets with `N.0`, `N.M`, `N.M.K` headings, use dotted-number parsing.
    - Collapse `N.0` to level 1 but keep the title text as `N.0 Title`.
    - Use the number tuple for ordering, not lexical filename order.
+   - Avoid adding broad TOC heuristics to the default sample script. Document-specific rules are acceptable when validation proves they are needed.
 
 3. Merge source files.
    - Preserve source order.
@@ -86,9 +87,9 @@ The goal is reproducible post-processing, not hand-editing generated fragments.
    - Search for remote image links if images were supposed to be localized.
    - Open one shallow section and one deep section to confirm relative images resolve.
 
-## Example Script
+## Sample Script
 
-Use or adapt [post_process_mineru_markdown.py](./scripts/post_process_mineru_markdown.py).
+Use or adapt [post_process_mineru_markdown.py](./scripts/post_process_mineru_markdown.py). Treat it as a starter script for common MinerU datasheet output, not as a complete Markdown parser.
 
 Typical command:
 
@@ -98,13 +99,14 @@ python .github/skills/datasheet-post-processing/scripts/post_process_mineru_mark
 
 ## Common Fixes
 
-- If top-level section count is too high, the heading regex is too permissive. Require an explicit dotted number such as `\d+\.\d+`.
+- If top-level section count is too high, the heading regex is too permissive. Require an explicit dotted number such as `\d+\.\d+`, then validate before adding broader TOC filters.
 - If `1.1` appears as a top-level section, convert `N.0` to level 1 and `N.M` to level 2.
 - If parent directories contain only child files and no parent overview, that is fine when the parent had no prose before the first child.
 - If a parent overview is named `index.md`, rename the generator output to `00_<section>.md` so users do not mistake it for a table of contents.
 - If `git add` fails with `Filename too long`, shorten generated path components and regenerate; do not rely on every collaborator enabling long-path support.
 - If image names are generic, improve nearby context extraction around figure and table labels.
 - If generated file paths are too long, shorten only the filename stem, not the visible section title inside the Markdown.
+- If a TOC line and a real section title are ambiguous, keep the title and catch the duplicate/noise during validation. Losing real sections is worse than leaving extra generated files.
 
 ## Completion Criteria
 
