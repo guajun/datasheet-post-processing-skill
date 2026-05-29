@@ -17,11 +17,16 @@ from urllib.request import urlopen
 IMAGE_PATTERN = re.compile(
     r'!\[(?P<alt>[^\]]*)\]\((?P<url>[^)\n]+?)(?:\s+"(?P<title>[^"]*)")?\)'
 )
+HTML_IMAGE_PATTERN = re.compile(
+    r'(?P<prefix><img\b[^>]*?\bsrc=")(?P<url>[^"]+)(?P<suffix>"[^>]*>)',
+    re.IGNORECASE,
+)
 HEADING_PATTERN = re.compile(r"^(?P<marks>#{1,6})\s+(?P<title>.+?)\s*$")
 NUMBERED_HEADING_PATTERN = re.compile(
     r"^(?P<number>\d+\.\d+(?:\.\d+)*)\s+(?P<title>.+?)\s*$"
 )
-TOC_LINE_PATTERN = re.compile(r"^\d+\.0\s+.+?(?:\.{1,}|\s)\s*\d+\s*$")
+TOC_LINE_PATTERN = re.compile(r"^\d+(?:\.\d+)*\s+.+?(?:\.{1,}|\s{2,})\s*\d{1,4}\s*$")
+LOOSE_TOP_LEVEL_TOC_LINE_PATTERN = re.compile(r"^\d+\.0\s+.+\s+\d{1,4}\s*$")
 INVALID_PATH_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 DEFAULT_SOURCE_SEPARATOR = "\n\n<!-- Source split: {name} -->\n\n"
 MAX_SECTION_STEM_LENGTH = 42
@@ -120,7 +125,16 @@ def normalize_title(text: str) -> str:
     return text.rstrip(". ")
 
 
-def parse_numbered_heading(raw_title: str) -> tuple[int, tuple[int, ...], str] | None:
+def parse_numbered_heading(
+    raw_title: str,
+    allow_loose_toc_match: bool = False,
+) -> tuple[int, tuple[int, ...], str] | None:
+    raw_toc_title = raw_title.replace("\u3000", " ").strip()
+    if TOC_LINE_PATTERN.match(raw_toc_title):
+        return None
+    if allow_loose_toc_match and LOOSE_TOP_LEVEL_TOC_LINE_PATTERN.match(raw_toc_title):
+        return None
+
     title = normalize_title(raw_title)
     if TOC_LINE_PATTERN.match(title):
         return None
@@ -150,12 +164,23 @@ def build_sections(lines: list[str], source_map: list[tuple[str, int, Path]]) ->
     roots: list[Section] = []
     stack: list[Section] = []
     current: Section | None = None
+    in_table_of_contents = False
 
     for index, line in enumerate(lines):
         source_file, source_line, _ = source_map[index] if index < len(source_map) else ("generated", 0, Path.cwd())
         heading_match = HEADING_PATTERN.match(line)
         if heading_match:
-            heading_info = parse_numbered_heading(heading_match.group("title"))
+            raw_heading_title = heading_match.group("title")
+            normalized_heading_title = normalize_title(raw_heading_title).casefold()
+            if normalized_heading_title == "table of contents":
+                in_table_of_contents = True
+            elif in_table_of_contents and not NUMBERED_HEADING_PATTERN.match(normalize_title(raw_heading_title)):
+                in_table_of_contents = False
+
+            heading_info = parse_numbered_heading(
+                raw_heading_title,
+                allow_loose_toc_match=in_table_of_contents and current is None,
+            )
             if heading_info is not None:
                 level, order_key, title = heading_info
                 section = Section(
@@ -173,6 +198,7 @@ def build_sections(lines: list[str], source_map: list[tuple[str, int, Path]]) ->
                     roots.append(section)
                 stack.append(section)
                 current = section
+                in_table_of_contents = False
                 continue
 
         if current is None:
@@ -290,7 +316,7 @@ def localize_images(
         if heading_match:
             current_heading = normalize_title(heading_match.group("title")) or current_heading
 
-        def replacer(match: re.Match[str]) -> str:
+        def markdown_image_replacer(match: re.Match[str]) -> str:
             nonlocal image_index
             image_index += 1
             url = match.group("url")
@@ -299,7 +325,16 @@ def localize_images(
             target = ensure_local_image(url, images_dir, timeout, localized, label, image_index, source_dir)
             return f"![{alt}]({target.as_posix()})"
 
-        rewritten_lines.append(IMAGE_PATTERN.sub(replacer, line))
+        def html_image_replacer(match: re.Match[str]) -> str:
+            nonlocal image_index
+            image_index += 1
+            url = match.group("url")
+            label = choose_image_label(current_heading, recent_context)
+            target = ensure_local_image(url, images_dir, timeout, localized, label, image_index, source_dir)
+            return f"{match.group('prefix')}{target.as_posix()}{match.group('suffix')}"
+
+        line = IMAGE_PATTERN.sub(markdown_image_replacer, line)
+        rewritten_lines.append(HTML_IMAGE_PATTERN.sub(html_image_replacer, line))
 
         context_label = extract_context_label(line)
         if context_label:
@@ -359,7 +394,18 @@ def rewrite_image_paths(markdown: str, from_dir: Path) -> str:
         relative = os.path.relpath(target, from_dir)
         return f"![{alt}]({Path(relative).as_posix()})"
 
-    return IMAGE_PATTERN.sub(replacer, markdown)
+    markdown = IMAGE_PATTERN.sub(replacer, markdown)
+
+    def html_replacer(match: re.Match[str]) -> str:
+        url = match.group("url")
+        parsed = urlparse(url)
+        if parsed.scheme in {"http", "https"}:
+            return match.group(0)
+        target = Path(url)
+        relative = os.path.relpath(target, from_dir)
+        return f"{match.group('prefix')}{Path(relative).as_posix()}{match.group('suffix')}"
+
+    return HTML_IMAGE_PATTERN.sub(html_replacer, markdown)
 
 
 def render_section_markdown(section: Section) -> str:
